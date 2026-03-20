@@ -1,9 +1,14 @@
-name: Publish to GH Pages
+name: Publish to main Pages
+
 on:
   push:
     branches:
       - main
   pull_request:
+
+# Grant permissions for the action to push changes to the repo
+permissions:
+  contents: write
 
 jobs:
   deploy:
@@ -13,28 +18,42 @@ jobs:
         uses: actions/checkout@v3
         with:
           submodules: true
+          fetch-depth: 0
 
       - name: Checkout destination
         uses: actions/checkout@v3
         if: github.ref == 'refs/heads/main'
         with:
-          ref: main
+          ref: gh-pages      # Must be gh-pages, not main
           path: built-site
 
       - name: Setup Hugo
         run: |
-          curl -L -o /tmp/hugo.tar.gz 'https://github.com/gohugoio/hugo/releases/download/v0.158.0/hugo_extended_0.158.0_darwin-universal.tar.gz'
+          # Using a valid stable version: v0.143.1
+          curl -L -o /tmp/hugo.tar.gz 'https://github.com/gohugoio/hugo/releases/download/v0.143.1/hugo_extended_0.143.1_darwin-universal.tar.gz'
           tar -C ${RUNNER_TEMP} -zxvf /tmp/hugo.tar.gz hugo
+
       - name: Build
-        run: ${RUNNER_TEMP}/hugo
+        run: ${RUNNER_TEMP}/hugo --minify
 
       - name: Deploy
         if: github.ref == 'refs/heads/main'
         run: |
+          # Clean destination first to remove old files
+          rm -rf ${GITHUB_WORKSPACE}/built-site/*
+          # Copy new build
           cp -R public/* ${GITHUB_WORKSPACE}/built-site/
           cd ${GITHUB_WORKSPACE}/built-site
-          git add .
+          
+          # Git configuration
           git config user.name 'Nayuki-Sunder'
           git config user.email 'sereiwathnaros@chungbuk.ac.kr'
-          git commit -m 'Updated site'
-          git push
+          
+          # Only commit if there are changes to avoid erroring out
+          git add .
+          if [ -n "$(git status --porcelain)" ]; then
+            git commit -m 'Updated site'
+            git push origin gh-pages
+          else
+            echo "No changes to commit"
+          fi
